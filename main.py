@@ -107,17 +107,31 @@ for fasta in FASTA_DIR.glob("*.fasta"):
         logger.error(f"[{name}] No PDB in {out_base}")
         continue
 
+    def clean_a3m(path):
+        out_lines = []
+        with open(path) as f:
+            for line in f:
+                if line.startswith(">"):
+                    out_lines.append(line.strip())
+                else:
+                    cleaned = ''.join([c for c in line.strip() if not c.islower()])
+                    out_lines.append(cleaned)
+        cleaned_path = str(path).replace(".a3m", "_clean.fasta")
+        with open(cleaned_path, "w") as out:
+            out.write("\n".join(out_lines) + "\n")
+        return cleaned_path
+
     # 2) Perturbations
     AMINO = list("ACDEFGHIKLMNPQRSTVWY")
     def perturb_delete(src,dst):
-        aln = AlignIO.read(str(src),"fasta")
+        aln = AlignIO.read(clean_a3m(src),"fasta")
         seqs,drop = list(aln), random.sample(range(len(aln)), min(NUM_DELETE,len(aln)-1))
         new = [s for i,s in enumerate(seqs) if i not in drop]
         AlignIO.write(MultipleSeqAlignment(new), str(dst),"fasta")
         logger.info(f"[{name}] delete → {dst}")
 
     def perturb_mutate(src,dst):
-        aln = AlignIO.read(str(src),"fasta")
+        aln = AlignIO.read(clean_a3m(src),"fasta")
         out=[]
         for r in aln:
             seq=list(str(r.seq))
@@ -157,6 +171,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
               save_msa=False,
               save_all=True
             )
+            logger.debug(f"[{name}] Files in {outd}: {list(outd.glob('*'))}")
             pdb_p = next(outd.glob("ranked_*.pdb"), None)
             plp = extract_plddt(pdb_p)
             rms = compute_rmsd(pdb_base,pdb_p)
