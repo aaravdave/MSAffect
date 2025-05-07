@@ -35,7 +35,7 @@ setup_logging()
 logger = logging.getLogger()
 
 # ─── Paths & Parameters ───────────────────────────────────────────────────────
-FASTA_DIR     = Path("msa")      # your fasta lives here, e.g. msa/ubiquitin.fasta
+FASTA_DIR     = Path("msa")
 RESULTS_ROOT  = Path("results")
 NUM_MODELS    = 5
 USE_TEMPLATES = False
@@ -66,7 +66,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     msas_dir.mkdir(parents=True, exist_ok=True)
     pert_dir.mkdir(exist_ok=True)
 
-    # 1) Baseline run
+    # 1) Baseline
     logger.info(f"[{name}] Downloading weights…")
     download_alphafold_params(model_type="AlphaFold2-ptm")
 
@@ -87,8 +87,8 @@ for fasta in FASTA_DIR.glob("*.fasta"):
       custom_template_path=None,
       num_models=NUM_MODELS,
       is_complex=is_cplx,
-      save_msa=True,         # ← ensure MSA (.a3m/.sto) is written
-      save_recycles=True,    # ← optional intermediate saves
+      save_msa=True,
+      save_recycles=True,
       save_all=True,
       save_pdb=True
     )
@@ -102,7 +102,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     logger.info(f"[{name}] Copied MSA → {msa_copy}")
 
     # baseline PDB
-    pdb_base = next(out_base.glob("*_alphafold2_ptm_model_*.pdb"), None)
+    pdb_base = next(out_base.glob("*.pdb"), None)
     if not pdb_base:
         logger.error(f"[{name}] No PDB in {out_base}")
         continue
@@ -176,7 +176,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     plt.close()
     logger.info(f"[{name}] 2D plot saved")
 
-    # 5) Auto 3D (in Colab)
+    # 5) 3D Visualization
     try:
         import glob, py3Dmol
         from colabfold.colabfold import plot_plddt_legend, pymol_color_list, alphabet_list
