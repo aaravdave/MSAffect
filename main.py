@@ -89,7 +89,8 @@ for fasta in FASTA_DIR.glob("*.fasta"):
       is_complex=is_cplx,
       save_msa=True,         # ← ensure MSA (.a3m/.sto) is written
       save_recycles=True,    # ← optional intermediate saves
-      save_all=True
+      save_all=True,
+      save_pdb=True
     )
     # locate raw MSA
     msa_file = next(out_base.glob("*.a3m"), None) or next(out_base.glob("*.sto"), None)
@@ -101,7 +102,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     logger.info(f"[{name}] Copied MSA → {msa_copy}")
 
     # baseline PDB
-    pdb_base = next(out_base.glob("ranked_*.pdb"), None)
+    pdb_base = next(out_base.glob("*_alphafold2_ptm_model_*.pdb"), None)
     if not pdb_base:
         logger.error(f"[{name}] No PDB in {out_base}")
         continue
