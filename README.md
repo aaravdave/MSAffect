@@ -11,6 +11,9 @@ Aarav H. Dave[^1]
 ## Paper
 *Coming Soon*
 
+## Installation
+*Coming Soon*
+
 ## Recognitions
 *Coming Soon*
 
