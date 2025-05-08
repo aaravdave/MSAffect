@@ -123,15 +123,21 @@ for fasta in FASTA_DIR.glob("*.fasta"):
 
     # 2) Perturbations
     AMINO = list("ACDEFGHIKLMNPQRSTVWY")
-    def perturb_delete(src,dst):
-        aln = AlignIO.read(clean_a3m(src),"fasta")
-        seqs,drop = list(aln), random.sample(range(len(aln)), min(NUM_DELETE,len(aln)-1))
-        new = [s for i,s in enumerate(seqs) if i not in drop]
-        AlignIO.write(MultipleSeqAlignment(new), str(dst),"fasta")
+    def perturb_delete(src, dst):
+        aln = AlignIO.read(clean_a3m(src), "fasta")
+        seqs = list(aln)
+        drop = random.sample(range(len(seqs)), min(NUM_DELETE, len(seqs)-1))
+        new = [s for i, s in enumerate(seqs) if i not in drop]
+        if not new:
+            logger.warning(f"[{name}] All sequences deleted for {dst.name}, skipping perturbation.")
+            return
+        temp_path = dst.with_suffix('.fasta')
+        AlignIO.write(MultipleSeqAlignment(new), str(temp_path), "fasta")
+        temp_path.rename(dst)
         logger.info(f"[{name}] delete → {dst}")
 
     def perturb_mutate(src,dst):
-        aln = AlignIO.read(clean_a3m(src),"fasta")
+        AlignIO.write(MultipleSeqAlignment(new), str(dst), "a3m")
         out=[]
         for r in aln:
             seq=list(str(r.seq))
@@ -143,8 +149,8 @@ for fasta in FASTA_DIR.glob("*.fasta"):
         logger.info(f"[{name}] mutate → {dst}")
 
     strat_list = [
-      ("delete", pert_dir/f"{name}_del{NUM_DELETE}{msa_copy.suffix}"),
-      ("mutate", pert_dir/f"{name}_mut{int(MUT_RATE*100)}{msa_copy.suffix}")
+        ("delete", pert_dir/f"{name}_del{NUM_DELETE}.a3m"),
+        ("mutate", pert_dir/f"{name}_mut{int(MUT_RATE*100)}.a3m")
     ]
     perturb_delete(msa_copy, strat_list[0][1])
     perturb_mutate(msa_copy, strat_list[1][1])
@@ -160,6 +166,12 @@ for fasta in FASTA_DIR.glob("*.fasta"):
             outd = base_dir/strat; outd.mkdir(exist_ok=True)
             logger.info(f"[{name}] rerunning {strat}…")
             q2, c2 = get_queries(str(fasta))
+            q2 = [{
+              "idx": q["idx"],
+              "seq": q["seq"],
+              "desc": f"{q['desc']}_{strat}"
+            }]
+
             run(
               queries=q2,
               result_dir=outd,
@@ -169,7 +181,8 @@ for fasta in FASTA_DIR.glob("*.fasta"):
               num_models=NUM_MODELS,
               is_complex=c2,
               save_msa=False,
-              save_all=True
+              save_all=True,
+              zip_results=False
             )
             logger.debug(f"[{name}] Files in {outd}: {list(outd.glob('*'))}")
             pdb_p = next(outd.glob("ranked_*.pdb"), None)
