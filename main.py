@@ -136,16 +136,21 @@ for fasta in FASTA_DIR.glob("*.fasta"):
         temp_path.rename(dst)
         logger.info(f"[{name}] delete → {dst}")
 
-    def perturb_mutate(src,dst):
-        AlignIO.write(MultipleSeqAlignment(new), str(dst), "a3m")
-        out=[]
+    def perturb_mutate(src, dst):
+        aln = AlignIO.read(clean_a3m(src), "fasta")
+        out = []
         for r in aln:
-            seq=list(str(r.seq))
+            seq = list(str(r.seq))
             for i in range(len(seq)):
-                if random.random()<MUT_RATE:
-                    seq[i] = random.choice([a for a in AMINO if a!=seq[i]])
-            out.append(SeqRecord(r.seq.__class__("".join(seq)),id=r.id,description=""))
-        AlignIO.write(MultipleSeqAlignment(out), str(dst),"fasta")
+                if random.random() < MUT_RATE:
+                    seq[i] = random.choice([a for a in AMINO if a != seq[i]])
+            out.append(SeqRecord(r.seq.__class__("".join(seq)), id=r.id, description=""))
+        if not out:
+            logger.warning(f"[{name}] No sequences to mutate for {dst.name}, skipping perturbation.")
+            return
+        temp_path = dst.with_suffix('.fasta')
+        AlignIO.write(MultipleSeqAlignment(out), str(temp_path), "fasta")
+        temp_path.rename(dst)
         logger.info(f"[{name}] mutate → {dst}")
 
     strat_list = [
