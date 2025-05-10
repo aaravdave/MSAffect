@@ -1,0 +1,4 @@
+strategy,param,mean_pLDDT,RMSD
+baseline,-,83.29,0.00
+delete,calmodulin_del5.a3m,75.23,4.278
+mutate,calmodulin_mut2.a3m,75.23,4.278

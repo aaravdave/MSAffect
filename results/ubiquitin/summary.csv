@@ -1,0 +1,4 @@
+strategy,param,mean_pLDDT,RMSD
+baseline,-,95.31,0.00
+delete,ubiquitin_del5.a3m,96.02,0.206
+mutate,ubiquitin_mut2.a3m,95.22,0.315

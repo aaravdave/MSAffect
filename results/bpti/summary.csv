@@ -1,0 +1,4 @@
+strategy,param,mean_pLDDT,RMSD
+baseline,-,96.73,0.00
+delete,bpti_del5.a3m,96.30,0.170
+mutate,bpti_mut2.a3m,96.46,0.186

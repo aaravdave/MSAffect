@@ -93,7 +93,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
       save_pdb=True
     )
     # locate raw MSA
-    msa_file = next(out_base.glob("*.a3m"), None) or next(out_base.glob("*.sto"), None)
+    msa_file = next(out_base.rglob("*.a3m"), None) or next(out_base.glob("*.sto"), None)
     if not msa_file:
         logger.error(f"[{name}] No MSA under {out_base}")
         continue
@@ -102,10 +102,11 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     logger.info(f"[{name}] Copied MSA → {msa_copy}")
 
     # baseline PDB
-    pdb_base = next(out_base.glob("*.pdb"), None)
+    pdb_base = next(out_base.rglob("*.pdb"), None)
     if not pdb_base:
-        logger.error(f"[{name}] No PDB in {out_base}")
+        logger.error(f"[{name}] No *.pdb under {out_base}")
         continue
+
 
     def clean_a3m(path):
         out_lines = []
@@ -167,30 +168,30 @@ for fasta in FASTA_DIR.glob("*.fasta"):
         w.writerow(["strategy","param","mean_pLDDT","RMSD"])
         pl0 = extract_plddt(pdb_base)
         w.writerow(["baseline","-",f"{pl0.mean():.2f}","0.00"])
-        for strat,msa in strat_list:
+        for strat, msa in strat_list:
             outd = base_dir/strat; outd.mkdir(exist_ok=True)
             logger.info(f"[{name}] rerunning {strat}…")
-            q2, c2 = get_queries(str(fasta))
-            q2 = [{
-              "idx": q["idx"],
-              "seq": q["seq"],
-              "desc": f"{q['desc']}_{strat}"
-            }]
-
+            strat_fasta = base_dir/f"{name}_{strat}.fasta"
+            seq = open(fasta).read().splitlines()[1]
+            with open(strat_fasta, 'w') as sf:
+                sf.write(f""">{name}_{strat}
+{seq}
+""")
+            q2, c2 = get_queries(str(strat_fasta))
             run(
-              queries=q2,
-              result_dir=outd,
-              use_templates=USE_TEMPLATES,
-              custom_msa_path=str(msa),
-              custom_template_path=None,
-              num_models=NUM_MODELS,
-              is_complex=c2,
-              save_msa=False,
-              save_all=True,
-              zip_results=False
+                queries=q2,
+                result_dir=outd,
+                use_templates=USE_TEMPLATES,
+                custom_msa_path=str(msa),
+                custom_template_path=None,
+                num_models=NUM_MODELS,
+                is_complex=c2,
+                save_msa=False,
+                save_all=True,
+                zip_results=False
             )
             logger.debug(f"[{name}] Files in {outd}: {list(outd.glob('*'))}")
-            pdb_p = next(outd.glob("ranked_*.pdb"), None)
+            pdb_p = next(outd.rglob("*.pdb"), None)
             plp = extract_plddt(pdb_p)
             rms = compute_rmsd(pdb_base,pdb_p)
             w.writerow([strat,msa.name,f"{plp.mean():.2f}",f"{rms:.3f}"])
