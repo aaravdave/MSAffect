@@ -1,240 +1,195 @@
-import os, random, csv, logging
+#!/usr/bin/env python3
+"""
+MSAffect: Adversarial Sequence Alignments for Protein Structure Prediction
+Fully implements environment checks, MSA generation (with fallback), perturbations, runs, analyses.
+"""
+import os
+import sys
+import random
+import subprocess
+import logging
 from pathlib import Path
 from datetime import datetime
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from Bio import AlignIO
 from Bio.Align import MultipleSeqAlignment
 from Bio.SeqRecord import SeqRecord
 from Bio.PDB import PDBParser, Superimposer
 
-from colabfold.batch import run, get_queries
-from colabfold.download import download_alphafold_params
+# Seed for reproducibility
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
 
-os.environ['HTTP_USER_AGENT'] = "MSAffect/0.1 contact@aaravdave.org"
+# Environment verification
+def check_environment():
+    if sys.version_info < (3,8):
+        sys.exit("Python 3.8+ is required.")
+    try:
+        import torch
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            if props.total_memory < 16 * 1024**3:
+                logging.warning("GPU memory <16GB detected.")
+        else:
+            logging.warning("CUDA GPU not detected; performance may be degraded.")
+    except ImportError:
+        logging.warning("PyTorch not installed; cannot check GPU.")
 
-# ─── Logging Setup ─────────────────────────────────────────────────────────────
-def setup_logging():
-    fmt = "%(levelname_color)s [%(asctime)s] %(message)s"
-    datefmt = "%H:%M:%S"
-    class ColorFormatter(logging.Formatter):
-        COLORS = {"INFO":"\033[94m","WARNING":"\033[93m","ERROR":"\033[91m"}
-        def format(self, record):
-            lvl = record.levelname
-            record.levelname_color = f"{self.COLORS.get(lvl,'')}{lvl}\033[0m"
-            record.asctime = datetime.fromtimestamp(record.created).strftime("[%H:%M:%S]")
-            return f"{record.levelname_color} {record.asctime} {record.getMessage()}"
-    h = logging.StreamHandler()
-    h.setFormatter(ColorFormatter(fmt, datefmt=datefmt))
-    logging.root.handlers[:] = [h]
-    logging.root.setLevel(logging.INFO)
+# Logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(asctime)s] %(message)s")
 
-setup_logging()
-logger = logging.getLogger()
-
-# ─── Paths & Parameters ───────────────────────────────────────────────────────
-FASTA_DIR     = Path("msa")
-RESULTS_ROOT  = Path("results")
-NUM_MODELS    = 5
+# Paths and parameters
+MSA_DIR = Path("msa")
+RESULTS_ROOT = Path("results")
+NUM_MODELS = 5
 USE_TEMPLATES = False
-MUT_RATE      = 0.02
-NUM_DELETE    = 5
+MUT_RATE = 0.02
+NUM_DELETE = 5
 
 RESULTS_ROOT.mkdir(exist_ok=True)
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
-def extract_plddt(pdb_path):
-    struct = PDBParser(QUIET=True).get_structure("m", str(pdb_path))
-    return np.array([a.get_bfactor() for a in struct.get_atoms() if a.get_id()=="CA"])
+# Helper: clean A3M to uniform FASTA
+def clean_a3m(a3m_path):
+    out = a3m_path.with_suffix('.clean.fasta')
+    lines = []
+    with open(a3m_path) as f:
+        for line in f:
+            if line.startswith('>'):
+                seq_id = line.strip()
+                lines.append(seq_id)
+            else:
+                seq = ''.join([c for c in line.strip() if c.isupper() or c=='-'])
+                lines.append(seq)
+    with open(out, 'w') as w:
+        w.write('\n'.join(lines) + '\n')
+    return out
 
-def compute_rmsd(a,b):
+# MSA via MMseqs2 fallback
+def run_mmseqs2(fasta, output_prefix):
+    tmp_db = output_prefix + "_db"
+    uniref = "uniref90"
+    try:
+        subprocess.run(["mmseqs","createdb",fasta,tmp_db],check=True)
+        subprocess.run(["mmseqs","search",tmp_db,uniref,tmp_db+"_res","/tmp"],check=True)
+        subprocess.run(["mmseqs","convertalis",tmp_db,uniref,tmp_db+"_res",output_prefix+".m8"],check=True)
+        subprocess.run(["mmseqs","result2msa",tmp_db,uniref,tmp_db+"_res",output_prefix+".a3m"],check=True)
+        return output_prefix+".a3m"
+    except Exception:
+        logging.error("MMseqs2 unavailable or failed; fallback")
+        return None
+
+# Structure extraction
+def extract_plddt(pdb):
+    struct = PDBParser(QUIET=True).get_structure('m',str(pdb))
+    b = [a.get_bfactor() for a in struct.get_atoms() if a.get_id()=='CA']
+    arr = np.array(b)
+    return arr, (arr>70).mean(), (arr>80).mean(), (arr>90).mean()
+
+def compute_rmsd(p1,p2):
     p = PDBParser(QUIET=True)
-    s1, s2 = p.get_structure("a",str(a)), p.get_structure("b",str(b))
-    ca1 = [x for x in s1.get_atoms() if x.get_id()=="CA"]
-    ca2 = [x for x in s2.get_atoms() if x.get_id()=="CA"]
-    sup = Superimposer(); sup.set_atoms(ca1,ca2)
+    s1 = p.get_structure('a',str(p1))
+    s2 = p.get_structure('b',str(p2))
+    ca1=[a for a in s1.get_atoms() if a.get_id()=='CA']
+    ca2=[a for a in s2.get_atoms() if a.get_id()=='CA']
+    sup=Superimposer(); sup.set_atoms(ca1,ca2)
     return sup.rms
 
-# ─── Pipeline ─────────────────────────────────────────────────────────────────
-for fasta in FASTA_DIR.glob("*.fasta"):
-    name      = fasta.stem
-    base_dir  = RESULTS_ROOT/name
-    msas_dir  = base_dir/"msas"
-    pert_dir  = base_dir/"perturbed"
-    msas_dir.mkdir(parents=True, exist_ok=True)
-    pert_dir.mkdir(exist_ok=True)
-
-    # 1) Baseline
-    logger.info(f"[{name}] Downloading weights…")
-    download_alphafold_params(model_type="AlphaFold2-ptm")
-
-    logger.info(f"[{name}] Running baseline…")
-    out_base = base_dir/"baseline"; out_base.mkdir(exist_ok=True)
-    if fasta.stat().st_size == 0:
-        logger.warning(f"[{name}] Skipping: FASTA file is empty.")
-        continue
+def tm_score(p1,p2):
     try:
-        queries, is_cplx = get_queries(str(fasta))
-    except Exception as e:
-        logger.error(f"[{name}] FASTA parsing failed: {e}")
-        continue
-    run(
-      queries=queries,
-      result_dir=out_base,
-      use_templates=USE_TEMPLATES,
-      custom_template_path=None,
-      num_models=NUM_MODELS,
-      is_complex=is_cplx,
-      save_msa=True,
-      save_recycles=True,
-      save_all=True,
-      save_pdb=True
-    )
-    # locate raw MSA
-    msa_file = next(out_base.rglob("*.a3m"), None) or next(out_base.glob("*.sto"), None)
-    if not msa_file:
-        logger.error(f"[{name}] No MSA under {out_base}")
-        continue
-    msa_copy = msas_dir/msa_file.name
-    msa_copy.write_bytes(msa_file.read_bytes())
-    logger.info(f"[{name}] Copied MSA → {msa_copy}")
+        r=subprocess.run(["TMscore",str(p1),str(p2)],capture_output=True,text=True)
+        for l in r.stdout.splitlines():
+            if l.startswith('TM-score='): return float(l.split()[1])
+    except:
+        logging.warning('TMscore failed')
+    return np.nan
 
-    # baseline PDB
-    pdb_base = next(out_base.rglob("*.pdb"), None)
-    if not pdb_base:
-        logger.error(f"[{name}] No *.pdb under {out_base}")
-        continue
+# Perturbation routines using cleaned alignment
+
+def perturb_delete(msa,a3m_out,n):
+    clean=clean_a3m(Path(msa))
+    aln=AlignIO.read(str(clean),'fasta')
+    if len(aln)<=n:
+        logging.warning('skip delete')
+        return False
+    keep=[r for i,r in enumerate(aln) if i not in random.sample(range(len(aln)),n)]
+    AlignIO.write(MultipleSeqAlignment(keep),str(a3m_out),'fasta')
+    return True
 
 
-    def clean_a3m(path):
-        out_lines = []
-        with open(path) as f:
-            for line in f:
-                if line.startswith(">"):
-                    out_lines.append(line.strip())
-                else:
-                    cleaned = ''.join([c for c in line.strip() if not c.islower()])
-                    out_lines.append(cleaned)
-        cleaned_path = str(path).replace(".a3m", "_clean.fasta")
-        with open(cleaned_path, "w") as out:
-            out.write("\n".join(out_lines) + "\n")
-        return cleaned_path
+def perturb_mutate(msa,a3m_out,rate):
+    clean=clean_a3m(Path(msa))
+    aln=AlignIO.read(str(clean),'fasta')
+    AMINO=list('ACDEFGHIKLMNPQRSTVWY')
+    out=[]
+    for r in aln:
+        seq=list(str(r.seq))
+        for i in range(len(seq)):
+            if random.random()<rate: seq[i]=random.choice([a for a in AMINO if a!=seq[i]])
+        out.append(SeqRecord(type(r.seq)(''.join(seq)),id=r.id,description=''))
+    AlignIO.write(MultipleSeqAlignment(out),str(a3m_out),'fasta')
+    return True
 
-    # 2) Perturbations
-    AMINO = list("ACDEFGHIKLMNPQRSTVWY")
-    def perturb_delete(src, dst):
-        aln = AlignIO.read(clean_a3m(src), "fasta")
-        seqs = list(aln)
-        drop = random.sample(range(len(seqs)), min(NUM_DELETE, len(seqs)-1))
-        new = [s for i, s in enumerate(seqs) if i not in drop]
-        if not new:
-            logger.warning(f"[{name}] All sequences deleted for {dst.name}, skipping perturbation.")
-            return
-        temp_path = dst.with_suffix('.fasta')
-        AlignIO.write(MultipleSeqAlignment(new), str(temp_path), "fasta")
-        temp_path.rename(dst)
-        logger.info(f"[{name}] delete → {dst}")
 
-    def perturb_mutate(src, dst):
-        aln = AlignIO.read(clean_a3m(src), "fasta")
-        out = []
-        for r in aln:
-            seq = list(str(r.seq))
-            for i in range(len(seq)):
-                if random.random() < MUT_RATE:
-                    seq[i] = random.choice([a for a in AMINO if a != seq[i]])
-            out.append(SeqRecord(r.seq.__class__("".join(seq)), id=r.id, description=""))
-        if not out:
-            logger.warning(f"[{name}] No sequences to mutate for {dst.name}, skipping perturbation.")
-            return
-        temp_path = dst.with_suffix('.fasta')
-        AlignIO.write(MultipleSeqAlignment(out), str(temp_path), "fasta")
-        temp_path.rename(dst)
-        logger.info(f"[{name}] mutate → {dst}")
+def perturb_shuffle(msa,a3m_out,_):
+    clean=clean_a3m(Path(msa))
+    aln=AlignIO.read(str(clean),'fasta')
+    rows=list(aln); random.shuffle(rows)
+    mat=np.array([list(str(r.seq)) for r in rows])
+    idx=np.arange(mat.shape[1]); np.random.shuffle(idx)
+    sh=mat[:,idx]; out=[]
+    for i,r in enumerate(rows):
+        out.append(SeqRecord(type(r.seq)(''.join(sh[i])),id=r.id,description=''))
+    AlignIO.write(MultipleSeqAlignment(out),str(a3m_out),'fasta')
+    return True
 
-    strat_list = [
-        ("delete", pert_dir/f"{name}_del{NUM_DELETE}.a3m"),
-        ("mutate", pert_dir/f"{name}_mut{int(MUT_RATE*100)}.a3m")
-    ]
-    perturb_delete(msa_copy, strat_list[0][1])
-    perturb_mutate(msa_copy, strat_list[1][1])
+# Run colabfold
 
-    # 3) Summary CSV
-    csv_path = base_dir/"summary.csv"
-    with open(csv_path,"w",newline="") as cf:
-        w = csv.writer(cf)
-        w.writerow(["strategy","param","mean_pLDDT","RMSD"])
-        pl0 = extract_plddt(pdb_base)
-        w.writerow(["baseline","-",f"{pl0.mean():.2f}","0.00"])
-        for strat, msa in strat_list:
-            outd = base_dir/strat; outd.mkdir(exist_ok=True)
-            logger.info(f"[{name}] rerunning {strat}…")
-            strat_fasta = base_dir/f"{name}_{strat}.fasta"
-            seq = open(fasta).read().splitlines()[1]
-            with open(strat_fasta, 'w') as sf:
-                sf.write(f""">{name}_{strat}
-{seq}
-""")
-            q2, c2 = get_queries(str(strat_fasta))
-            run(
-                queries=q2,
-                result_dir=outd,
-                use_templates=USE_TEMPLATES,
-                custom_msa_path=str(msa),
-                custom_template_path=None,
-                num_models=NUM_MODELS,
-                is_complex=c2,
-                save_msa=False,
-                save_all=True,
-                zip_results=False
-            )
-            logger.debug(f"[{name}] Files in {outd}: {list(outd.glob('*'))}")
-            pdb_p = next(outd.rglob("*.pdb"), None)
-            plp = extract_plddt(pdb_p)
-            rms = compute_rmsd(pdb_base,pdb_p)
-            w.writerow([strat,msa.name,f"{plp.mean():.2f}",f"{rms:.3f}"])
-    logger.info(f"[{name}] summary.csv saved")
+def run_cf(fasta,msa,odir):
+    from colabfold.batch import run,get_queries
+    q,c=get_queries(fasta)
+    run(queries=q,result_dir=odir,use_templates=USE_TEMPLATES,custom_msa_path=msa,num_models=NUM_MODELS,is_complex=c,save_pdb=True,save_msa=False)
 
-    # 4) 2D Plot
-    data = np.genfromtxt(csv_path, delimiter=",", names=True, dtype=None, encoding=None)
-    fig,ax1 = plt.subplots()
-    ax1.bar(data["strategy"], data["mean_pLDDT"].astype(float), alpha=0.6)
-    ax1.set_ylabel("mean pLDDT")
-    ax2 = ax1.twinx()
-    ax2.plot(data["strategy"], data["RMSD"].astype(float), "ro-")
-    ax2.set_ylabel("RMSD (Å)")
-    plt.title(f"{name}: pLDDT vs RMSD")
-    fig.savefig(base_dir/"summary_plot.png")
-    plt.close()
-    logger.info(f"[{name}] 2D plot saved")
-
-    # 5) 3D Visualization
-    try:
-        import glob, py3Dmol
-        from colabfold.colabfold import plot_plddt_legend, pymol_color_list, alphabet_list
-        def show3D(rank=1, color="lDDT", side=False, main=False):
-            pdbs = glob.glob(f"{base_dir}/baseline/ranked_{rank}.pdb")
-            view = py3Dmol.view(js="https://3dmol.org/build/3Dmol.js")
-            view.addModel(open(pdbs[0]).read(), "pdb")
-            if color=="lDDT":
-                view.setStyle({'cartoon':{'colorscheme':{'prop':'b','gradient':'roygb','min':50,'max':90}}})
-            elif color=="rainbow":
-                view.setStyle({'cartoon':{'color':'spectrum'}})
-            elif color=="chain":
-                for ch,cc in zip(alphabet_list,pymol_color_list):
-                    view.setStyle({'chain':ch},{'cartoon':{'color':cc}})
-            if side:
-                view.addStyle({'and':[{'resn':['GLY','PRO'],'invert':True},{'atom':['C','O','N'],'invert':True}]},
-                              {'stick':{'colorscheme':'WhiteCarbon','radius':0.3}})
-            if main:
-                view.addStyle({'atom':['C','O','N','CA']},
-                              {'stick':{'colorscheme':'WhiteCarbon','radius':0.3}})
-            view.zoomTo(); view.show()
-            if color=="lDDT": plot_plddt_legend().show()
-        show3D()
-    except Exception:
-        pass
-
-    logger.info(f"[{name}] Done → results/{name}/")
+# Pipeline
+if __name__=='__main__':
+    check_environment()
+    for f in MSA_DIR.glob('*.fasta'):
+        n=f.stem; b=RESULTS_ROOT/n; m=b/'msas'; p=b/'perturbed'
+        for d in (b,m,p): d.mkdir(parents=True,exist_ok=True)
+        # baseline MSA
+        pre=m/(n+'_baseline'); a3m=run_mmseqs2(str(f),str(pre))
+        if not a3m:
+            ob=b/'baseline'; ob.mkdir(exist_ok=True)
+            from colabfold.download import download_alphafold_params
+            download_alphafold_params('AlphaFold2-ptm')
+            from colabfold.batch import run,get_queries
+            q,c=get_queries(str(f))
+            run(queries=q,result_dir=ob,use_templates=USE_TEMPLATES,custom_msa_path=None,num_models=NUM_MODELS,is_complex=c,save_pdb=False,save_msa=True)
+            a3m=next(ob.rglob('*.a3m'))
+        depth=sum(1 for l in open(a3m) if l.startswith('>'))
+        # baseline structure
+        ob=b/'baseline'; ob.mkdir(exist_ok=True)
+        from colabfold.download import download_alphafold_params
+        download_alphafold_params('AlphaFold2-ptm')
+        from colabfold.batch import run,get_queries
+        q,c=get_queries(str(f))
+        run(queries=q,result_dir=ob,use_templates=USE_TEMPLATES,custom_msa_path=a3m,num_models=NUM_MODELS,is_complex=c,save_pdb=True,save_msa=False)
+        p0=next(ob.rglob('*.pdb')); arr0,f70_0,f80_0,f90_0=extract_plddt(p0)
+        # perturb
+        strat=[('delete',pre.with_name(n+'_delete.a3m'),NUM_DELETE),('mutate',pre.with_name(n+'_mut.a3m'),MUT_RATE),('shuffle',pre.with_name(n+'_shuffle.a3m'),None)]
+        recs=[{'strategy':'baseline','param':'-','depth':depth,'mean_pLDDT':arr0.mean(),'frac>70':f70_0,'frac>80':f80_0,'frac>90':f90_0,'RMSD':0,'TM-score':1}]
+        for s,path,par in strat:
+            ok=globals()[f'perturb_{s}'](a3m,path,par)
+            if not ok: continue
+            od=b/s; od.mkdir(exist_ok=True)
+            run_cf(str(f),str(path),str(od))
+            pp=next(Path(od).rglob('*.pdb')); arr,f70,f80,f90=extract_plddt(pp); rms=compute_rmsd(p0,pp); tm=tm_score(p0,pp)
+            recs.append({'strategy':s,'param':par,'depth':depth,'mean_pLDDT':arr.mean(),'frac>70':f70,'frac>80':f80,'frac>90':f90,'RMSD':rms,'TM-score':tm})
+        df=pd.DataFrame(recs); df.to_csv(b/'summary.csv',index=False); df.to_pickle(b/'summary.pkl')
+        # plots
+        plt.figure(); df.plot.bar(x='strategy',y='mean_pLDDT',yerr=df['mean_pLDDT'].std(),legend=False); plt.ylabel('Mean pLDDT'); plt.title(f'{n}'); plt.savefig(b/'pLDDT_bar.png'); plt.close()
+        plt.figure(); plt.scatter(df['mean_pLDDT'],df['RMSD']); m,b_=np.polyfit(df['mean_pLDDT'],df['RMSD'],1); plt.plot(df['mean_pLDDT'],m*df['mean_pLDDT']+b_); plt.xlabel('Mean pLDDT'); plt.ylabel('RMSD'); plt.savefig(b/'RMSD_vs_pLDDT.png'); plt.close()
+        logging.info(f'{n} complete')
