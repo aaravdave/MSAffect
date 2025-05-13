@@ -12,7 +12,7 @@ Aarav H. Dave[^1]
 *Coming Soon*
 
 ## Installation
-*Coming Soon*
+Install `MSAffect.ipynb` from this repository and open the notebook in Google Colab. Then, click the run button next to the title "Initiate MSAffect Environment." Finally, clicking the run button next to the title "Run MSAffect" will begin the program on all FASTA sequences in `msa/`.
 
 ## Recognitions
 *Coming Soon*
