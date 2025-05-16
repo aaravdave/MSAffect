@@ -179,7 +179,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     perturb_mutate(msa_copy, strat_list[1][1])
     perturb_shuffle(msa_copy, strat_list[2][1])
 
-    # Summary CSV
+    # 1) Summary CSV
     csv_path = base_dir / "summary.csv"
     with open(csv_path, "w", newline="") as cf:
         w = csv.writer(cf)
@@ -215,7 +215,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
             w.writerow([strat, msa.name, depth, f"{plp.mean():.2f}", f"{f70:.2f}", f"{f80:.2f}", f"{f90:.2f}", f"{rms:.3f}"])
     logger.info(f"[{name}] summary.csv saved")
 
-    # 2D Plot
+    # 2) 2D Plot
     data = np.genfromtxt(csv_path, delimiter=",", names=True, dtype=None, encoding=None)
     fig, ax1 = plt.subplots()
     ax1.bar(data["strategy"], data["mean_pLDDT"].astype(float), alpha=0.6)
@@ -227,5 +227,47 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     fig.savefig(base_dir / "summary_plot.png")
     plt.close()
     logger.info(f"[{name}] 2D plot saved")
+
+    # 3) Scatterplot: MSA depth vs RMSD
+    try:
+        fig, ax = plt.subplots()
+        depths     = data["depth"].astype(float)
+        rmsd_vals  = data["RMSD"].astype(float)
+        for i, strat in enumerate(data["strategy"]):
+            ax.scatter(depths[i], rmsd_vals[i], label=strat)
+        ax.set_xlabel("MSA depth (# sequences)")
+        ax.set_ylabel("RMSD (Å)")
+        ax.set_xscale("log")
+        ax.set_title(f"{name}: Depth vs RMSD")
+        ax.legend()
+        fig.savefig(base_dir / "depth_vs_rmsd_scatter.png")
+        plt.close()
+        logger.info(f"[{name}] depth_vs_rmsd_scatter.png saved")
+    except Exception as e:
+        logger.warning(f"[{name}] Depth scatterplot failed: {e}")
+
+    # 4) 3D Snapshot of baseline model (py3Dmol → PNG)
+    try:
+        import py3Dmol, glob, base64
+
+        pdbs = glob.glob(str(out_base) + "/**/*rank_001*.pdb", recursive=True)
+        if not pdbs:
+            logger.warning(f"[{name}] No rank_001 PDB found for 3D snapshot")
+        else:
+            view = py3Dmol.view(js='https://3dmol.org/build/3Dmol.js')
+            view.addModel(open(pdbs[0]).read(), 'pdb')
+            view.setStyle({'cartoon': {'colorscheme': {'prop':'b','gradient':'roygb','min':50,'max':90}}})
+            view.zoomTo()
+            view.render()
+            png_data_uri = view.png()
+            header, b64 = png_data_uri.split(',', 1)
+            img_bytes = base64.b64decode(b64)
+            out_png = base_dir / "baseline_rank1.png"
+            with open(out_png, "wb") as f:
+                f.write(img_bytes)
+            logger.info(f"[{name}] 3D snapshot saved → {out_png}")
+    except Exception as e:
+        logger.warning(f"[{name}] 3D snapshot failed: {e}")
+
 
     logger.info(f"[{name}] Done → {base_dir}/")
