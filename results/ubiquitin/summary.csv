@@ -1,5 +1,5 @@
 strategy,param,depth,mean_pLDDT,frac>70,frac>80,frac>90,RMSD
-baseline,-,21605,95.22,0.96,0.95,0.93,0.00
-delete,ubiquitin_del5.a3m,21605,95.48,0.96,0.95,0.93,0.350
-mutate,ubiquitin_mut2.a3m,21605,96.03,0.97,0.96,0.95,0.241
-shuffle,ubiquitin_shuffle.a3m,21605,96.03,0.97,0.96,0.95,0.241
+baseline,-,21605,94.80,0.97,0.96,0.93,0.00
+delete,ubiquitin_del5.a3m,21605,95.52,0.96,0.95,0.93,0.151
+mutate,ubiquitin_mut2.a3m,21605,95.48,0.96,0.95,0.93,0.348
+shuffle,ubiquitin_shuffle.a3m,21605,96.03,0.97,0.96,0.95,0.251

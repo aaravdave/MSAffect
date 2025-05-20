@@ -248,26 +248,53 @@ for fasta in FASTA_DIR.glob("*.fasta"):
 
     # 4) 3D Snapshot of baseline model (py3Dmol → PNG)
     try:
-        import py3Dmol, glob, base64
+        import py3Dmol, glob
+        from colabfold.colabfold import plot_plddt_legend, pymol_color_list, alphabet_list
 
-        pdbs = glob.glob(str(out_base) + "/**/*rank_001*.pdb", recursive=True)
-        if not pdbs:
-            logger.warning(f"[{name}] No rank_001 PDB found for 3D snapshot")
+        rank_num = 1             # 1 to 5
+        color    = "lDDT"        # "chain", "rainbow", or "lDDT"
+        show_sidechains = False  # True to render sidechains
+        show_mainchains = False  # True to render mainchain sticks
+
+        pattern = f"*rank_{rank_num:03d}_*.pdb"
+        pdb_list = glob.glob(str(out_base) + f"/**/{pattern}", recursive=True)
+        if not pdb_list:
+            logger.warning(f"[{name}] No PDB matching {pattern} for 3D display")
         else:
-            view = py3Dmol.view(js='https://3dmol.org/build/3Dmol.js')
-            view.addModel(open(pdbs[0]).read(), 'pdb')
-            view.setStyle({'cartoon': {'colorscheme': {'prop':'b','gradient':'roygb','min':50,'max':90}}})
-            view.zoomTo()
-            view.render()
-            png_data_uri = view.png()
-            header, b64 = png_data_uri.split(',', 1)
-            img_bytes = base64.b64decode(b64)
-            out_png = base_dir / "baseline_rank1.png"
-            with open(out_png, "wb") as f:
-                f.write(img_bytes)
-            logger.info(f"[{name}] 3D snapshot saved → {out_png}")
+            pdb_file = pdb_list[0]
+
+            def show_pdb(rank_num=1, show_sidechains=False, show_mainchains=False, color="lDDT"):
+                view = py3Dmol.view(js="https://3dmol.org/build/3Dmol.js")
+                view.addModel(open(pdb_file).read(), "pdb")
+
+                if color == "lDDT":
+                    view.setStyle({'cartoon': {'colorscheme': {'prop':'b','gradient':'roygb','min':50,'max':90}}})
+                elif color == "rainbow":
+                    view.setStyle({'cartoon': {'color':'spectrum'}})
+                elif color == "chain":
+                    for ch, ccol in zip(alphabet_list, pymol_color_list):
+                        view.setStyle({'chain': ch}, {'cartoon': {'color': ccol}})
+
+                if show_sidechains:
+                    BB = ['C','O','N']
+                    view.addStyle({'and':[{'resn':['GLY','PRO'],'invert':True},{'atom':BB,'invert':True}]},
+                                  {'stick':{'colorscheme':'WhiteCarbon','radius':0.3}})
+                    view.addStyle({'and':[{'resn':'GLY'},{'atom':'CA'}]},
+                                  {'sphere':{'colorscheme':'WhiteCarbon','radius':0.3}})
+                    view.addStyle({'and':[{'resn':'PRO'},{'atom':['C','O'],'invert':True}]},
+                                  {'stick':{'colorscheme':'WhiteCarbon','radius':0.3}})
+                if show_mainchains:
+                    BB = ['C','O','N','CA']
+                    view.addStyle({'atom':BB}, {'stick':{'colorscheme':'WhiteCarbon','radius':0.3}})
+
+                view.zoomTo()
+                return view
+
+            show_pdb(rank_num, show_sidechains, show_mainchains, color).show()
+            if color == "lDDT":
+                plot_plddt_legend().show()
     except Exception as e:
-        logger.warning(f"[{name}] 3D snapshot failed: {e}")
+        logger.warning(f"[{name}] 3D display failed: {e}")
 
 
     logger.info(f"[{name}] Done → {base_dir}/")

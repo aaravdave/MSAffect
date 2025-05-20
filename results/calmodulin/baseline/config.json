@@ -31,7 +31,7 @@
     "random_seed": 0,
     "num_seeds": 1,
     "recompile_padding": 10,
-    "commit": "d1b8ec153b65a6b90e75a8d12f058ee292473962",
+    "commit": "8c55fc2548823d57bb23c24a6b2573348e6d51c8",
     "use_dropout": false,
     "use_cluster_profile": true,
     "use_fuse": true,
