@@ -22,7 +22,7 @@ This repository hosts project files (2025.1α) for public usage dictated by its 
 1. **Open `MSAffect.ipynb`** in a Google Colaboratory environment.
 2. **Install dependencies** by running “Initiate MSAffect Environment” cell, which will install ColabFold, Biopython, NumPy, Matplotlib, and py3Dmol.
 3. **Prepare your FASTA inputs** by placing one or more `.fasta` files in the `msa/` directory. `ubiquitin.fasta`, `bpti.fasta`, and `calmodulin.fasta` are included as examples.
-4. **Execute the pipeline** by running the “Run MSAffect” cell. The script will process every FASTA in `msa/`, create subfolders under `results/`, and produce summary tables and figures.
+4. **Execute the pipeline** by running the “Run MSAffect” cell. The script will process every FASTA in `msa/`, create subfolders under `results/`, and produce summary tables and figures. You can visualize your results in 3D by running the "3D Visualize Results" cell.
 5. **Contribute edits** by adding your GitHub token and running the "Push to MSAffect GitHub" cell.
 
 ## Recognitions
