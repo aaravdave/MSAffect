@@ -100,11 +100,9 @@ for fasta in FASTA_DIR.glob("*.fasta"):
         use_templates=USE_TEMPLATES,
         custom_template_path=None,
         num_models=NUM_MODELS,
-        is_complex=is_cplx,
-        save_msa=True,
+        is_complex=is_cplx
         save_recycles=True,
-        save_all=True,
-        save_pdb=True
+        save_all=True
     )
 
     msa_file = next(out_base.rglob("*.a3m"), None) or next(out_base.glob("*.sto"), None)
@@ -121,6 +119,86 @@ for fasta in FASTA_DIR.glob("*.fasta"):
         logger.error(f"[{name}] No *rank_*.pdb under {out_base}")
         continue
 
+    # ─── Module 4: Explainable Attribution by Occlusion ───────────────────
+    def attribute_columns_by_occlusion(msa_path, pdb_ref, results_dir):
+        """
+        For each column in the MSA, remove that column (mask it to gap),
+        rerun AlphaFold, and record drop in mean pLDDT relative to baseline.
+        """
+        pl0, _, _, _ = extract_plddt(pdb_ref)
+        base_score = pl0.mean()
+
+        cleaned = clean_a3m(msa_path)
+        aln     = AlignIO.read(str(cleaned), "fasta")
+        ncol = aln.get_alignment_length()
+        drops = []
+
+        for col in range(ncol):
+            masked = []
+            for rec in aln:
+                seq = list(str(rec.seq))
+                seq[col] = "-"
+                masked.append(SeqRecord(rec.seq.__class__("".join(seq)),
+                                        id=rec.id, description=""))
+
+            tmp_msa = results_dir / f"occlude_col{col:03d}.a3m"
+            AlignIO.write(MultipleSeqAlignment(masked), str(tmp_msa), "a3m")
+
+            out_dir = results_dir / f"occlude_col{col:03d}"
+            out_dir.mkdir(exist_ok=True)
+            q, cplx = get_queries(str(fasta))  
+            run(
+              queries=q,
+              result_dir=out_dir,
+              use_templates=USE_TEMPLATES,
+              msa_path=str(tmp_msa),
+              custom_template_path=None,
+              num_models=NUM_MODELS,
+              is_complex=cplx,
+              save_msa=False,
+              save_all=True
+            )
+
+            pdb_new = next(out_dir.rglob("*rank_*.pdb"), None)
+            if not pdb_new:
+                logger.warning(f"[{name}] Occlusion col {col} failed: no PDB")
+                drops.append((col, None))
+                continue
+
+            pl_new, _, _, _ = extract_plddt(pdb_new)
+            score_new = pl_new.mean()
+            drops.append((col, base_score - score_new))
+            logger.info(f"[{name}] occlude col {col:03d} → ΔpLDDT={(base_score-score_new):.2f}")
+
+        attr_csv = results_dir / "column_attributions.csv"
+        with open(attr_csv, "w", newline="") as af:
+            w = csv.writer(af)
+            w.writerow(["column", "delta_mean_pLDDT"])
+            for col, delta in drops:
+                w.writerow([col, "" if delta is None else f"{delta:.3f}"])
+        logger.info(f"[{name}] Column attribution saved → {attr_csv}")
+
+        deltas = np.array([d if d is not None else 0 for (_, d) in drops])
+        fig, ax = plt.subplots(figsize=(6,2))
+        ax.plot(np.arange(ncol), deltas, "-o", markersize=3)
+        ax.set_xlabel("MSA Column Index")
+        ax.set_ylabel("Δ mean pLDDT")
+        ax.set_title(f"{name}: Column Attribution (occlusion)")
+        fig.savefig(results_dir / "column_attribution_plot.png", bbox_inches="tight")
+        plt.close()
+        logger.info(f"[{name}] Column attribution plot saved")
+
+        return attr_csv
+
+    try:
+        attr_dir = base_dir / "attribution"
+        attr_dir.mkdir(exist_ok=True)
+        attribute_columns_by_occlusion(msa_copy, pdb_base, attr_dir)
+    except Exception as e:
+        logger.warning(f"[{name}] Attribution module failed: {e}")
+    
+    # ─── Perturbation Pipeline ───────────────────
+    
     AMINO = list("ACDEFGHIKLMNPQRSTVWY")
 
     def perturb_delete(src, dst):
@@ -179,6 +257,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
     perturb_mutate(msa_copy, strat_list[1][1])
     perturb_shuffle(msa_copy, strat_list[2][1])
 
+    # ─── Perturbation Results ───────────────────
     # 1) Summary CSV
     csv_path = base_dir / "summary.csv"
     with open(csv_path, "w", newline="") as cf:
@@ -198,7 +277,7 @@ for fasta in FASTA_DIR.glob("*.fasta"):
                 queries=q2,
                 result_dir=outd,
                 use_templates=USE_TEMPLATES,
-                custom_msa_path=str(msa),
+                msa_path=str(msa),
                 custom_template_path=None,
                 num_models=NUM_MODELS,
                 is_complex=c2,
