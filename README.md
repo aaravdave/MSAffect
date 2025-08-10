@@ -1,3 +1,4 @@
+![MSAffect Logo](logo.png)
 # MSAffect
 
 Aarav H. Dave[^1]
@@ -46,6 +47,7 @@ This software, as with all subsequent versions of the software, is protected by 
 For questions concerning the contents of this repository, please contact contact [at] aaravdave [dot] org.
 
 [^1]: Lowndes High School, Valdosta, GA
+
 
 
 
