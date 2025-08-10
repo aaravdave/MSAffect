@@ -1,5 +1,4 @@
 strategy,param,depth,mean_pLDDT,frac>70,frac>80,frac>90,RMSD
-baseline,-,14594,96.23,0.98,0.98,0.95,0.00
-delete,bpti_del5.a3m,14594,96.95,0.98,0.98,0.95,0.155
-mutate,bpti_mut2.a3m,14594,97.05,0.98,0.98,0.95,0.295
-shuffle,bpti_shuffle.a3m,14594,96.73,0.98,0.98,0.95,0.185
+baseline,-,1,0.00,0.00,0.00,0.00,0.00
+mutate,bpti_mut2.fasta,1,0.00,0.00,0.00,0.00,nan
+shuffle,bpti_shuffle.fasta,1,0.00,0.00,0.00,0.00,nan
