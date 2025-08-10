@@ -13,7 +13,7 @@ This repository implements **MSAffect**, a computational pipeline for generating
 This repository hosts project files (2025.1α) for public usage dictated by its license.
 
 ## Abstract
-*Coming Soon*
+MSAffect is an end-to-end computational pipeline that generates, perturbs, and evaluates multiple-sequence alignments (MSAs) to probe the sensitivity of protein structure prediction to alignment changes. The package automates baseline MSA construction and three adversarial perturbation strategies—homolog deletion, residue-level substitution, and combined row/column shuffling—followed by AlphaFold-style structure prediction. Outputs are analysed with per-residue confidence scores (pLDDT), global structural deviation (RMSD), and column-occlusion attribution maps that highlight alignment positions most influential to model confidence. Complementary modules implement a genetic algorithm for adversarial MSA search, a compact variational autoencoder for latent-space sampling, and a Gym-compatible reinforcement-learning environment for learned editing policies. Optional dependencies are detected at runtime; a dry-run simulation mode fabricates lightweight MSA and PDB artifacts to accelerate development and reproducible testing. Case studies on canonical soluble proteins demonstrate that modest MSA perturbations can precipitate marked drops in predicted confidence and measurable conformational shifts, revealing loci of model brittleness. MSAffect provides a reproducible, extensible toolkit for systematic robustness benchmarking and mechanistic interrogation of sequence-context effects on structural prediction. Source code, examples, and documentation accompany this public release.
 
 ## Paper
 *Coming Soon*
@@ -46,3 +46,4 @@ This software, as with all subsequent versions of the software, is protected by 
 For questions concerning the contents of this repository, please contact contact [at] aaravdave [dot] org.
 
 [^1]: Lowndes High School, Valdosta, GA
+
