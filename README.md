@@ -31,18 +31,18 @@ The increasing reliance on multiple sequence alignments (MSAs) for protein struc
 
 ## Technical Specifications
 This software utilizes:  
-- **Google Colaboratory**
-- **ColabFold** (AlphaFold2)
-- **Python 3.11**
-- **Biopython**
-- **NumPy**
-- **Matplotlib**
-- **py3Dmol**
-- **Requests**
-- **PyTorch**
-- **Gym**
-- **Stable Baselines3**
-- **Scikit-learn**
+- Google Colaboratory
+- ColabFold (AlphaFold2)
+- Python 3.11
+- Biopython
+- NumPy
+- Matplotlib
+- py3Dmol
+- Requests
+- PyTorch
+- Gym
+- Stable Baselines3
+- Scikit-learn
 
 ## License
 This software, as with all subsequent versions of the software, is protected by the CC-BY-NC-ND license. In summary, this does not allow commercial usage, distribution, or distribution of modifications of the software. In additon, you are required to credit authorship and state any changes you may have made.
@@ -52,6 +52,7 @@ This software, as with all subsequent versions of the software, is protected by 
 For questions concerning the contents of this repository, please contact contact [at] aaravdave [dot] org.
 
 [^1]: Lowndes High School, Valdosta, GA
+
 
 
 
