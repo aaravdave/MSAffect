@@ -4,7 +4,7 @@
 Aarav H. Dave[^1]
 
 ## Summary
-This repository implements **MSAffect**, a computational pipeline for generating, perturbing, and analyzing multiple-sequence alignments (MSAs) in the context of protein structure prediction with AlphaFold2. It automates:  
+This repository implements MSAffect, a computational pipeline for generating, perturbing, and analyzing multiple-sequence alignments (MSAs) in the context of protein structure prediction with AlphaFold2. It automates:  
 - Baseline MSA generation via ColabFold/MMseqs2  
 - Three adversarial perturbations (deletion, residue-level mutation, row-and-column shuffle)  
 - AlphaFold2 runs on both unperturbed and perturbed MSAs  
@@ -20,11 +20,11 @@ The increasing reliance on multiple sequence alignments (MSAs) for protein struc
 *Coming Soon*
 
 ## Installation
-1. **Open `MSAffect.ipynb`** in a Google Colaboratory environment.
-2. **Install dependencies** by running “Initiate MSAffect Environment” cell, which will install ColabFold, Biopython, NumPy, Matplotlib, and py3Dmol.
-3. **Prepare your FASTA inputs** by placing one or more `.fasta` files in the `msa/` directory. `ubiquitin.fasta`, `bpti.fasta`, and `calmodulin.fasta` are included as examples.
-4. **Execute the pipeline** by running the “Run MSAffect” cell. The script will process every FASTA in `msa/`, create subfolders under `results/`, and produce summary tables and figures. You can visualize your results in 3D by running the "3D Visualize Results" cell.
-5. **Contribute edits** by adding your GitHub token and running the "Push to MSAffect GitHub" cell.
+1. Open `MSAffect.ipynb` in a Google Colaboratory environment.
+2. Install dependencies by running “Initiate MSAffect Environment” cell, which will install ColabFold, Biopython, NumPy, Matplotlib, and py3Dmol.
+3. Prepare your FASTA inputs by placing one or more `.fasta` files in the `msa/` directory. `ubiquitin.fasta`, `bpti.fasta`, and `calmodulin.fasta` are included as examples.
+4. Execute the pipeline by running the “Run MSAffect” cell. The script will process every FASTA in `msa/`, create subfolders under `results/`, and produce summary tables and figures. You can visualize your results in 3D by running the "3D Visualize Results" cell.
+5. Contribute edits by adding your GitHub token and running the "Push to MSAffect GitHub" cell.
 
 ## Recognitions
 *Coming Soon*
@@ -52,6 +52,7 @@ This software, as with all subsequent versions of the software, is protected by 
 For questions concerning the contents of this repository, please contact contact [at] aaravdave [dot] org.
 
 [^1]: Lowndes High School, Valdosta, GA
+
 
 
 
