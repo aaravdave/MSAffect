@@ -44,14 +44,11 @@ This software utilizes:
 - Stable Baselines3
 - Scikit-learn
 
-## License
-This software, as with all subsequent versions of the software, is protected by the CC-BY-NC-ND license. In summary, this does not allow commercial usage, distribution, or distribution of modifications of the software. In additon, you are required to credit authorship and state any changes you may have made.
-> For more information, please refer to the `LICENSE` file.
-
 ## Contacts
 For questions concerning the contents of this repository, please contact contact [at] aaravdave [dot] org.
 
 [^1]: Lowndes High School, Valdosta, GA
+
 
 
 
